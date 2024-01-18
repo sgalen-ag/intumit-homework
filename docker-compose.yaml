@@ -1,0 +1,108 @@
+version: '3'      
+services:
+  db:
+    container_name: db
+    image: mysql:5.7                                      #mysql5.7镜像
+    #volumes:
+    #  - ./db_data:/var/lib/mysql                      #把宿主机的/data/db_data目录映射到容器中的/var/lib/mysql目录
+    networks:
+      - intumit
+    restart: always
+    environment:                                          #设置镜像变量并把这些变量保存到容器中
+      MYSQL_ROOT_PASSWORD: 1234.com                       
+      MYSQL_DATABASE: wordpress                           
+      MYSQL_USER: wordpress                               
+      MYSQL_PASSWORD: wordpress
+
+  wordpress1:                                             #wordpress
+    container_name: wordpress1
+    depends_on:                                           #需要先启动db，才能启动自己
+      - db
+    image: wordpress:latest                               #最新的wordpress镜像
+    #volumes:
+    #  - ./ap_wordpress:/var/www/html                      #把宿主机的/data/web_data目录映射到容器中的/var/www/html目录
+    networks:
+      - intumit
+    ports: 
+      - "32768:80"                                        #端口映射，把容器的80端口映射到宿主机的32768端口
+    #expose:
+     # - 80                                                #开放容器端口80，但映射到主机
+    restart: always
+    environment:                                          #设置镜像变量并把这些变量保存到容器中
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      
+  wordpress2:                                             #wordpress
+    container_name: wordpress2
+    depends_on:                                           #需要先启动db，才能启动自己
+      - db
+    image: wordpress:latest
+    #volumes:
+    #  - ./ap_wordpress:/var/www/html
+    networks:
+      - intumit
+    ports: 
+      - "32769:80"                                        #端口映射，把容器的80端口映射到宿主机的32769端口
+    #expose:
+     # - 80
+    restart: always
+    environment:                                           
+      WORDPRESS_DB_HOST: db:3306
+      WORDPRESS_DB_USER: wordpress
+      WORDPRESS_DB_PASSWORD: wordpress
+      
+  haproxy_backend:                                                 #haproxy
+    container_name: haproxy_backend
+    depends_on:                                            #需要先启动wordpress1和2，才能启动自己
+      - wordpress1
+      - wordpress2
+    image: haproxy                                         #haproxy镜像
+    volumes:
+      - ./back-end_haproxy:/usr/local/etc/haproxy                   #把宿主机的./haproxy目录映射到容器中的/usr/local/etc/haproxy目录
+    networks:
+      - intumit
+    links:                                                 #连接到wordpress1和2中的容器
+      - wordpress1
+      - wordpress2
+    ports:                                                 #端口映射，容器的80端口映射到宿主机的8080端口
+      - "8080:80" 
+  nginx1:
+    container_name: nginx1
+    depends_on:                                            #需要先启动wordpress1和2，才能启动自己
+      - haproxy_backend    
+    image: nginx:1.18
+    ports:
+      - "81:80"
+    volumes:
+      - ./web_nginx/:/etc/nginx/conf.d/
+    networks:
+      - intumit
+  nginx2:
+    container_name: nginx2
+    depends_on:                                            #需要先启动wordpress1和2，才能启动自己
+      - haproxy_backend    
+    image: nginx:1.18
+    ports:
+      - "82:80"
+    volumes:
+      - ./web_nginx/:/etc/nginx/conf.d/
+    networks:
+      - intumit
+  haproxy_frontend:                                                 #haproxy
+    container_name: haproxy_frontend
+    depends_on:                                            #需要先启动wordpress1和2，才能启动自己
+      - nginx1
+      - nginx2
+    image: haproxy                                         #haproxy镜像
+    volumes:
+      - ./front-end_haproxy:/usr/local/etc/haproxy                   #把宿主机的./haproxy目录映射到容器中的/usr/local/etc/haproxy目录
+    networks:
+      - intumit
+    ports:                                                 #端口映射，容器的80端口映射到宿主机的8080端口
+      - "80:80" 
+    expose:                                                #暴露容器端口80，仅暴露端口，不映射
+      - 80      
+networks:
+  intumit:
+    driver: bridge
